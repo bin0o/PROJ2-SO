@@ -11,7 +11,7 @@ static pthread_mutex_t global_lock_destroy;
 
 pthread_cond_t destroy_all_cond;
 
-bool destroyed_files;
+bool destroying_files;
 
 static int open_files=0;
 
@@ -45,7 +45,7 @@ static bool valid_pathname(char const *name) {
 int tfs_destroy_after_all_closed() {
     if (pthread_mutex_lock(&global_lock_destroy) != 0)
         return -1;
-    destroyed_files=true;
+    destroying_files=true;
     while(open_files>0){
         pthread_cond_wait(&destroy_all_cond,&global_lock_destroy);
     }
@@ -129,7 +129,7 @@ static int _tfs_open_unsynchronized(char const *name, int flags) {
 }
 
 int tfs_open(char const *name, int flags) {
-    if (destroyed_files||pthread_mutex_lock(&single_global_lock) != 0 )
+    if (destroying_files||pthread_mutex_lock(&single_global_lock) != 0 )
         return -1;
     int ret = _tfs_open_unsynchronized(name, flags);
     open_files++;
