@@ -3,6 +3,7 @@
 
 #include "common/common.h"
 #include <sys/types.h>
+#include <fcntl.h>
 
 /*
  * Establishes a session with a TecnicoFS server.
