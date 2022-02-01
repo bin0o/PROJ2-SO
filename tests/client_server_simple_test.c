@@ -29,6 +29,7 @@ int main(int argc, char **argv) {
 
     r = tfs_write(f, str, strlen(str));
     assert(r == strlen(str));
+    
 
     assert(tfs_close(f) != -1);
 

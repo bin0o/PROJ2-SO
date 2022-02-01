@@ -27,7 +27,6 @@ typedef struct {
     int sessionId;
     int fhandle;
     size_t len;
-    char* buffer;
 } write_ar;
 
 typedef struct {
