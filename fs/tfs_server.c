@@ -64,6 +64,27 @@ int tfs_mount_server(int fd_server){
     runningSessions++;
 }
 
+int tfs_unmount_server(int fd_server){
+    int sessionId;
+    int success = 0;
+    // Le session id
+    read(fd_server, &sessionId, sizeof(int));
+
+    fd_client=open(session_table[sessionId],O_WRONLY);
+
+    if (fd_client<0)
+        return -1;
+
+    // Apagar pipe do client da tabela de sessoes
+    free(session_table[sessionId]);
+
+    runningSessions--;
+
+    // Avisa o cliente do sucesso da operacao
+    write(fd_client, &success, sizeof(int));
+}
+
+
 void tfs_open_server(int fd_server){
     int returnVal;
     open_ar open_struct;

@@ -44,8 +44,25 @@ int tfs_mount(char const *client_pipe_path, char const *server_pipe_path) {
 }
 
 int tfs_unmount() {
-    /* TODO: Implement this */
-    return -1;
+    char buffer[6];
+    int ans;
+
+    buffer[0] = '2';
+    memcpy(buffer+1, sessionId, sizeof(int));
+
+    // Faz request de unmount
+    write(fd_server, buffer,sizeof(buffer));
+
+    // Recebe resposta
+    read(fd_client, &ans, sizeof(int));
+
+    if(ans == -1)
+        return -1;
+
+    close(fd_server);
+    close(fd_client);
+
+    return 0;
 }
 
 int tfs_open(char const *name, int flags) {
