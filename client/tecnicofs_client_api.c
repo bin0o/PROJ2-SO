@@ -73,12 +73,9 @@ int tfs_open(char const *name, int flags) {
 
     buffer[0]='3';
 
-    open_ar request;
-    strcpy(request.fileName,name);
-    request.sessionId=sessionId;
-    request.flags=flags;
-
-    memcpy(buffer+1,&request,sizeof(open_ar));
+    memcpy(buffer + 1, &sessionId, sizeof(int));
+    memcpy(buffer + 1 + sizeof(int), name, 40);
+    memcpy(buffer + 1 + sizeof(int) + 40, &flags, sizeof(int));
 
     write(fd_server,buffer,sizeof(buffer));
 
@@ -88,40 +85,73 @@ int tfs_open(char const *name, int flags) {
 }
 
 int tfs_close(int fhandle) {
-    /* TODO: Implement this */
-    return -1;
+    char buffer[10];
+    int ans;
+
+    buffer[0] = '4';
+
+    memcpy(buffer+1,&sessionId, sizeof(int));
+    memcpy(buffer+1+sizeof(int), &fhandle, sizeof(int));
+
+    write(fd_server,buffer, sizeof(buffer));
+
+    read(fd_client, &ans, sizeof(int));
+
+    return ans;
 }
 
 ssize_t tfs_write(int fhandle, void const *buffer, size_t len) {
-    /* TODO: Implement this */
-    char bufferTotal[len+8+sizeof(size_t)+1];
+    
+    char bufferTotal[4 + len + sizeof(size_t) + 1];
     memset(bufferTotal,0,sizeof(buffer));
-    ssize_t returnVal;
+    
+    ssize_t bytesWritten;
 
     bufferTotal[0]='5';
 
-    write_ar request;
-    request.sessionId=sessionId;
-    request.fhandle=fhandle;
-    request.len=len;
-
-    memcpy(bufferTotal+1,&request,sizeof(write_ar));
-
-    memcpy(bufferTotal+sizeof(write_ar)+1,buffer,len);
+    memcpy(bufferTotal + 1, &sessionId, sizeof(int));
+    memcpy(bufferTotal + 1 + sizeof(int), &fhandle, sizeof(int));
+    memcpy(bufferTotal + 1 + sizeof(int) + sizeof(int), &len, sizeof(size_t));
+    memcpy(bufferTotal + 1 + sizeof(int) + sizeof(int) + sizeof(size_t), buffer, sizeof(buffer));
 
     write(fd_server,bufferTotal,sizeof(bufferTotal));
 
-    read(fd_client,&returnVal,sizeof(ssize_t));
+    read(fd_client,&bytesWritten,sizeof(ssize_t));
 
-    return returnVal;
+    return bytesWritten;
 }
 
 ssize_t tfs_read(int fhandle, void *buffer, size_t len) {
-    /* TODO: Implement this */
-    return -1;
+    
+    char bufferTotal[4 + len + sizeof(size_t) + 1];
+
+    bufferTotal[0] = '6';
+
+    memcpy(bufferTotal + 1, &sessionId, sizeof(int));
+    memcpy(bufferTotal + 1 + sizeof(int), &fhandle, sizeof(int));
+    memcpy(bufferTotal + 1 + sizeof(int) + sizeof(int), &len, sizeof(size_t));
+
+    write(fd_server,bufferTotal, sizeof(bufferTotal));
+
+    ssize_t bytesRead;
+    read(fd_client, &bytesRead, sizeof(ssize_t));
+    read(fd_client, buffer, bytesRead);
+
+    return bytesRead;
 }
 
 int tfs_shutdown_after_all_closed() {
-    /* TODO: Implement this */
-    return -1;
+    
+    char buffer[6];
+    int success;
+
+    buffer[0] = '7';
+
+    memcpy(buffer + 1, &sessionId, sizeof(int));
+
+    write(fd_server, buffer, sizeof(buffer));
+
+    read(fd_server, &success, sizeof(int));
+
+    return success;
 }

@@ -8,6 +8,8 @@ int runningSessions=0;
 
 int fd_client;
 
+int exitFlag=0;
+
 int getSessionId(){ // lock
     if(runningSessions >= MAX_SESSIONS)
         return -1;
@@ -70,11 +72,6 @@ int tfs_unmount_server(int fd_server){
     // Le session id
     read(fd_server, &sessionId, sizeof(int));
 
-    fd_client=open(session_table[sessionId],O_WRONLY);
-
-    if (fd_client<0)
-        return -1;
-
     // Apagar pipe do client da tabela de sessoes
     free(session_table[sessionId]);
 
@@ -87,33 +84,94 @@ int tfs_unmount_server(int fd_server){
 
 void tfs_open_server(int fd_server){
     int returnVal;
-    open_ar open_struct;
-    read(fd_server,&open_struct,sizeof(open_ar));
-    if (!sessionIdExists(open_struct.sessionId)){
+
+    int sessionId;
+    char fileName[41];
+    int flags;
+
+    read(fd_server,&sessionId, sizeof(int));
+    read(fd_server,&fileName, sizeof(fileName));
+    read(fd_server,&flags, sizeof(int));
+
+    if (!sessionIdExists(sessionId)){
         return -1;
     }
 
-    returnVal=tfs_open(open_struct.fileName,open_struct.flags);
+    returnVal=tfs_open(fileName,flags);
     write(fd_client,&returnVal,sizeof(int));
 
 }
 
+void tfs_close_server(int fd_server){
+    int sessionId;
+    int fhandle;
+    int returnVal;
+
+    read(fd_server,&sessionId, sizeof(int));
+    read(fd_server,&fhandle,sizeof(int));
+
+    returnVal = tfs_close(fhandle);
+
+    write(fd_client,&returnVal, sizeof(int));
+}
+
 
 void tfs_write_server(int fd_server){
-    ssize_t returnVal;
-    write_ar write_struct;
-    read(fd_server,&write_struct,sizeof(write_ar));
-    char buffer[write_struct.len];
-    read(fd_server,buffer,write_struct.len);
-    if (!session_table[write_struct.sessionId]){
+    ssize_t bytesWritten;
+    int sessionId;
+    int fhandle;
+    size_t len;
+
+
+    read(fd_server,&sessionId,sizeof(int));
+    read(fd_server,&fhandle, sizeof(int));
+    read(fd_server,&len, sizeof(size_t));
+
+    char buffer[len];
+
+    read(fd_server,buffer,len);
+    if (!session_table[sessionId]){
         return -1;
     }
 
-    returnVal=tfs_write(write_struct.fhandle,buffer,write_struct.len);
-    write(fd_client,&returnVal,sizeof(ssize_t));
+    bytesWritten=tfs_write(fhandle,buffer,len);
+    write(fd_client,&bytesWritten,sizeof(ssize_t));
+}
+
+void tfs_read_server(int fd_server){
+    int sessionId;
+    int fhandle;
+    size_t len;
+
+    ssize_t bytesRead;
+
+    read(fd_server, &sessionId, sizeof(int));
+    read(fd_server,&fhandle, sizeof(int));
+    read(fd_server,&len, sizeof(int));
+
+    char buffer[len];
+
+    bytesRead = tfs_read(fhandle, &buffer, len);
+
+    write(fd_client,bytesRead, sizeof(ssize_t));
+    write(fd_client,buffer, bytesRead);
 
 }
 
+void tfs_shutdown_after_all_closed_server(fd_server){
+
+    int sessionId;
+    int success;
+
+    read(fd_server, &sessionId, sizeof(int));
+
+    success = tfs_destroy_after_all_closed();
+
+    if(success)
+        exitFlag=1;
+
+    write(fd_client, &success, sizeof(int));
+}
 
 int main(int argc, char **argv) {
     int fd;
@@ -136,7 +194,7 @@ int main(int argc, char **argv) {
     if (fd<0){
         return -1;
     }
-    while(1){
+    while(!exitFlag){
         r=read(fd,&OP_CODE,sizeof(char));
         if (r==0){
             close(fd);
@@ -146,11 +204,24 @@ int main(int argc, char **argv) {
             case '1':
                 tfs_mount_server(fd);
                 break;
+            case '2':
+                tfs_unmount_server(fd);
+                break;
             case '3':
                 tfs_open_server(fd);
                 break;
+            case '4':
+                tfs_close_server(fd);
+                break;
             case '5':
                 tfs_write_server(fd);
+                break;
+            case '6':
+                tfs_read_server(fd);
+                break;
+            case '7':
+                tfs_shutdown_after_all_closed_server(fd);
+                break;
             default:
                 break;
         }
