@@ -5,6 +5,7 @@
 #include <sys/stat.h>
 #include <string.h>
 #include <fcntl.h>
+#include <pthread.h>
 
 
 /*Session table*/
@@ -12,21 +13,54 @@ static char session_table[MAX_SESSIONS][MAX_FILE_NAME];
 
 pthread_t thread_table[MAX_SESSIONS];
 
-static char buffer_thread[MAX_SESSIONS][100];
+pthread_mutex_t mutex;
+
+pthread_cond_t client_cond, server_cond;
+
+int clientptr=0;
+int serverptr=0;
+int count=0;
+
+static char buffer_thread[MAX_SESSIONS][2048];
 
 // Number of sessions running atm
 int runningSessions=0;
 
 int fd_client;
+char *pipename;
 
 int exitFlag=0;
 
-int getSessionId(){ // lock
+
+void* client(){
+    //char buffer_client[50];
+    while(1){
+        pthread_mutex_lock(&mutex);
+        while(!count){
+            pthread_cond_wait(&client_cond,&mutex);
+        }
+        //strcpy(buffer_client,buffer_thread[0][clientptr]);
+        clientptr++;
+        if (clientptr==MAX_SESSIONS)
+            clientptr=0;
+        count--;
+        pthread_cond_signal(&server_cond);
+        pthread_mutex_unlock(&mutex);
+    }
+} 
+
+int getSessionId(){
+    // if (pthread_mutex_lock(&mutex)!=0){
+    //     return -1;
+    // }
     if(runningSessions >= MAX_SESSIONS)
         return -1;
     for(int i = 0; i < MAX_SESSIONS; i++)
         if(strlen(session_table[i]) == 0)
             return i;
+    // if (pthread_mutex_unlock(&mutex)!=0){
+    //     return -1;
+    // }
     return -1;
 }
 
@@ -61,11 +95,14 @@ int sessionIdExists(int sessionId){
 
 int tfs_mount_server(int fd_server){
     int sessionId = getSessionId();
+    // if (pthread_join(thread_table[sessionId],NULL)!=0){
+    //         return -1;
+    // }
     char buffer[41];
     // Le pipename do client
     read_all(fd_server,buffer,MAX_PIPENAME);
     
-    memcpy(buffer_thread,buffer,sizeof(buffer));
+    memcpy(buffer_thread[sessionId],buffer,sizeof(buffer));
 
     // Atualizamos tabela de sessoes iniciadas
     memcpy(session_table[sessionId],buffer,MAX_PIPENAME);
@@ -96,6 +133,9 @@ int tfs_unmount_server(int fd_server){
 
     // Avisa o cliente do sucesso da operacao
     write_all(fd_client, &success, sizeof(int));
+    if(close(fd_client)<0){
+        return -1;
+    }
     return 0;
 }
 
@@ -195,16 +235,26 @@ int tfs_shutdown_after_all_closed_server(int fd_server){
 
     read_all(fd_server, &sessionId, sizeof(int));
 
-    if (!sessionIdExists(sessionId)){
-        return -1;
-    }
-
     success = tfs_destroy_after_all_closed();
+
 
     if(success)
         exitFlag=1;
 
+    // Apagar pipe do client da tabela de sessoes
+    memset(session_table[sessionId],0,MAX_PIPENAME);
+
     write_all(fd_client, &success, sizeof(int));
+    if (close(fd_client)<0){
+        return -1;
+    }
+    if (close(fd_server)<0){
+        return -1;
+    }
+
+    if (unlink(pipename)<0){
+        return -1;
+    }
     return 0;
 }
 
@@ -218,16 +268,13 @@ int main(int argc, char **argv) {
         return 1;
     }
 
-    char *pipename = argv[1];
+    pipename = argv[1];
     printf("Starting TecnicoFS server with pipe called %s\n", pipename);
     tfs_init();
 
-    int destroy_pipe= unlink(pipename);
-    if (destroy_pipe<0){
-        return -1;
-    }
-    int create_pipe=mkfifo(pipename,0777);
-    if (create_pipe!=0)
+    unlink(pipename);
+
+    if (mkfifo(pipename,0777)!=0)
         return -1;
 
     fd = open(pipename,O_RDONLY);
@@ -235,11 +282,16 @@ int main(int argc, char **argv) {
         return -1;
     }
 
+    // for (int i=0;i<MAX_SESSIONS;i++){
+    //     if (pthread_create(&thread_table[i],NULL,&client,NULL)!=0){
+    //         return -1;
+    //     }
+    // }
+
     while(!exitFlag){
         r=read_all(fd,&OP_CODE,sizeof(char));
         if (r==0){
-            int erro=close(fd);
-            if (erro<0){
+            if (close(fd)<0){
                 return -1;
             }
             fd = open(pipename,O_RDONLY);
@@ -267,8 +319,7 @@ int main(int argc, char **argv) {
                 tfs_read_server(fd);
                 break;
             case '7':
-                tfs_shutdown_after_all_closed_server(fd);
-                break;
+                return tfs_shutdown_after_all_closed_server(fd);
             default:
                 break;
         }

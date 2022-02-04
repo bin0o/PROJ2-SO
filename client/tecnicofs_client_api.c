@@ -72,11 +72,16 @@ int tfs_unmount() {
         return -1;
     }
 
+    if(close(fd_server)<0){
+        return -1;
+    }
+    if(close(fd_client)<0){
+        return -1;
+    }
+    if(unlink(pipename)<0){
+        return -1;
+    }
     return ans;
-
-    close(fd_server);
-    close(fd_client);
-    unlink(pipename);
 }
 
 int tfs_open(char const *name, int flags) {
@@ -164,9 +169,9 @@ ssize_t tfs_read(int fhandle, void *buffer, size_t len) {
     if (read(fd_client, &bytesRead, sizeof(ssize_t))<0){
         return -1;
     }
-     if (read(fd_client, buffer,(size_t) bytesRead)<0){
-         return -1;
-     }
+    if (read(fd_client, buffer,(size_t) len)<0){
+        return -1;
+    }
 
     return bytesRead;
 }
@@ -184,7 +189,19 @@ int tfs_shutdown_after_all_closed() {
         return -1;
     }
 
-    if (read(fd_server, &success, sizeof(int))<0){
+    if (read(fd_client, &success, sizeof(int))<0){
+        return -1;
+    }
+
+    if (close(fd_client)<0){
+        return -1;
+    }
+
+    if(close(fd_server)<0){
+        return -1;
+    }
+
+    if(unlink(pipename)<0){
         return -1;
     }
 
