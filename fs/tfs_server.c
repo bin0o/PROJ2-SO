@@ -1,7 +1,10 @@
 #include "operations.h"
+#include <string.h>
 
 /*Session table*/
 static char session_table[MAX_SESSIONS][MAX_FILE_NAME];
+
+pthread_t thread_table[MAX_SESSIONS];
 
 // Number of sessions running atm
 int runningSessions=0;
@@ -24,7 +27,7 @@ size_t read_all(int fd,void *buffer,size_t to_read){
     size_t alr_read=0;
     while(to_read>0){
         to_read_portion=to_read;
-        alr_read+=read(fd,buffer+alr_read,to_read_portion);
+        alr_read+=(size_t)read(fd,buffer+alr_read,to_read_portion);
         to_read-=to_read_portion;
     }
     return alr_read;
@@ -35,7 +38,7 @@ size_t write_all(int fd, void* source,size_t to_write){
     size_t alr_written=0;
     while(to_write>0){
         to_write_portion=to_write;
-        alr_written+=write(fd,source+alr_written,to_write_portion);
+        alr_written+=(size_t)write(fd,source+alr_written,to_write_portion);
         to_write-=to_write_portion;
     }
     return alr_written;
@@ -64,6 +67,7 @@ int tfs_mount_server(int fd_server){
     write_all(fd_client,&sessionId,sizeof(int));
 
     runningSessions++;
+    return 0;
 }
 
 int tfs_unmount_server(int fd_server){
@@ -72,6 +76,9 @@ int tfs_unmount_server(int fd_server){
     // Le session id
     read_all(fd_server, &sessionId, sizeof(int));
 
+    if (!sessionIdExists(sessionId)){
+        return -1;
+    }
     // Apagar pipe do client da tabela de sessoes
     memset(session_table[sessionId],0,MAX_PIPENAME);
 
@@ -79,10 +86,11 @@ int tfs_unmount_server(int fd_server){
 
     // Avisa o cliente do sucesso da operacao
     write_all(fd_client, &success, sizeof(int));
+    return 0;
 }
 
 
-void tfs_open_server(int fd_server){
+int tfs_open_server(int fd_server){
     int returnVal;
 
     int sessionId;
@@ -99,10 +107,11 @@ void tfs_open_server(int fd_server){
 
     returnVal=tfs_open(fileName,flags);
     write_all(fd_client,&returnVal,sizeof(int));
+    return 0;
 
 }
 
-void tfs_close_server(int fd_server){
+int tfs_close_server(int fd_server){
     int sessionId;
     int fhandle;
     int returnVal;
@@ -110,13 +119,17 @@ void tfs_close_server(int fd_server){
     read_all(fd_server,&sessionId, sizeof(int));
     read_all(fd_server,&fhandle,sizeof(int));
 
+    if (!sessionIdExists(sessionId)){
+        return -1;
+    }
     returnVal = tfs_close(fhandle);
 
     write_all(fd_client,&returnVal, sizeof(int));
+    return 0;
 }
 
 
-void tfs_write_server(int fd_server){
+int tfs_write_server(int fd_server){
     ssize_t bytesWritten;
     int sessionId;
     int fhandle;
@@ -131,15 +144,16 @@ void tfs_write_server(int fd_server){
     memset(buffer,0,len);
 
     read_all(fd_server,buffer,len);
-    if (!session_table[sessionId]){
+    if (!sessionIdExists(sessionId)){
         return -1;
     }
 
     bytesWritten=tfs_write(fhandle,buffer,len);
     write_all(fd_client,&bytesWritten,sizeof(ssize_t));
+    return 0;
 }
 
-void tfs_read_server(int fd_server){
+int tfs_read_server(int fd_server){
     int sessionId;
     int fhandle;
     size_t len;
@@ -150,21 +164,30 @@ void tfs_read_server(int fd_server){
     read_all(fd_server,&fhandle, sizeof(int));
     read_all(fd_server,&len, sizeof(size_t));
 
+    if (!sessionIdExists(sessionId)){
+        return -1;
+    }
+
     char buffer[len];
 
     bytesRead = tfs_read(fhandle, buffer, len);
 
     write_all(fd_client,&bytesRead, sizeof(ssize_t));
-    write_all(fd_client,buffer, bytesRead);
+    write_all(fd_client,buffer,(size_t) bytesRead);
+    return 0;
 
 }
 
-void tfs_shutdown_after_all_closed_server(fd_server){
+int tfs_shutdown_after_all_closed_server(int fd_server){
 
     int sessionId;
     int success;
 
     read_all(fd_server, &sessionId, sizeof(int));
+
+    if (!sessionIdExists(sessionId)){
+        return -1;
+    }
 
     success = tfs_destroy_after_all_closed();
 
@@ -172,12 +195,12 @@ void tfs_shutdown_after_all_closed_server(fd_server){
         exitFlag=1;
 
     write_all(fd_client, &success, sizeof(int));
+    return 0;
 }
 
 int main(int argc, char **argv) {
     int fd;
     char OP_CODE;
-    int sessionId;
     int r;
 
     if (argc < 2) {
@@ -188,8 +211,12 @@ int main(int argc, char **argv) {
     char *pipename = argv[1];
     printf("Starting TecnicoFS server with pipe called %s\n", pipename);
     tfs_init();
-    unlink(pipename);
-    if (mkfifo(pipename,0777)!=0)
+    int destroy_pipe= unlink(pipename);
+    if (destroy_pipe<0){
+        return 0;
+    }
+    int create_pipe=mkfifo(pipename,0777);
+    if (create_pipe!=0)
         return -1;
     fd = open(pipename,O_RDONLY);
     if (fd<0){
@@ -198,8 +225,14 @@ int main(int argc, char **argv) {
     while(!exitFlag){
         r=read(fd,&OP_CODE,sizeof(char));
         if (r==0){
-            close(fd);
+            int erro=close(fd);
+            if (erro<0){
+                return -1;
+            }
             fd = open(pipename,O_RDONLY);
+            if (fd<0){
+               return -1;
+            }   
         }
         switch(OP_CODE){
             case '1':
