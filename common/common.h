@@ -4,36 +4,6 @@
 #define COMMON_H
 #define MAX_SESSIONS (20)
 #define MAX_PIPENAME (40)
-/*
- * Request and answer messages
- */
-
-typedef struct {
-    int sessionId;
-} unmount_shutdown_ar;
-
-typedef struct {
-    int sessionId;
-    char fileName[MAX_PIPENAME];
-    int flags;
-} open_ar;
-
-typedef struct {
-    int sessionId;
-    int fhandle;
-} close_ar;
-
-typedef struct {
-    int sessionId;
-    int fhandle;
-    size_t len;
-} write_ar;
-
-typedef struct {
-    int sessionId;
-    int fhandle;
-    size_t len;
-} read_ar;
 
 
 /* tfs_open flags */

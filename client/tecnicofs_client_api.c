@@ -101,7 +101,7 @@ int tfs_close(int fhandle) {
 ssize_t tfs_write(int fhandle, void const *buffer, size_t len) {
     
     char bufferTotal[8 + len + sizeof(size_t) + 1];
-    memset(bufferTotal,0,sizeof(bufferTotal));
+    memset(bufferTotal,'\0',sizeof(bufferTotal));
     
     ssize_t bytesWritten;
 
@@ -122,7 +122,7 @@ ssize_t tfs_write(int fhandle, void const *buffer, size_t len) {
 ssize_t tfs_read(int fhandle, void *buffer, size_t len) {
     ssize_t bytesRead;
     char bufferTotal[4 + len + sizeof(size_t) + 1];
-    memset(bufferTotal,0,sizeof(bufferTotal));
+    memset(bufferTotal,'\0',sizeof(bufferTotal));
 
     bufferTotal[0] = '6';
 

@@ -89,16 +89,16 @@ void tfs_open_server(int fd_server){
     char fileName[40];
     int flags;
 
-    read(fd_server,&sessionId, sizeof(int));
-    read(fd_server,fileName, 40);
-    read(fd_server,&flags, sizeof(int));
+    read_all(fd_server,&sessionId, sizeof(int));
+    read_all(fd_server,fileName, 40);
+    read_all(fd_server,&flags, sizeof(int));
 
     if (!sessionIdExists(sessionId)){
         return -1;
     }
 
     returnVal=tfs_open(fileName,flags);
-    write(fd_client,&returnVal,sizeof(int));
+    write_all(fd_client,&returnVal,sizeof(int));
 
 }
 
@@ -123,20 +123,20 @@ void tfs_write_server(int fd_server){
     size_t len;
 
 
-    read(fd_server,&sessionId,sizeof(int));
-    read(fd_server,&fhandle, sizeof(int));
-    read(fd_server,&len, sizeof(size_t));
+    read_all(fd_server,&sessionId,sizeof(int));
+    read_all(fd_server,&fhandle, sizeof(int));
+    read_all(fd_server,&len, sizeof(size_t));
 
     char buffer[len];
     memset(buffer,0,len);
 
-    read(fd_server,buffer,len);
+    read_all(fd_server,buffer,len);
     if (!session_table[sessionId]){
         return -1;
     }
 
     bytesWritten=tfs_write(fhandle,buffer,len);
-    write(fd_client,&bytesWritten,sizeof(ssize_t));
+    write_all(fd_client,&bytesWritten,sizeof(ssize_t));
 }
 
 void tfs_read_server(int fd_server){
