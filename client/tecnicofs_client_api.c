@@ -1,9 +1,15 @@
 #include "tecnicofs_client_api.h"
+#include <stdio.h>
+#include <unistd.h>
+#include <sys/types.h>
+#include <sys/stat.h>
 #include <string.h>
+#include <fcntl.h>
 
 int fd_server;
 int fd_client;
 int sessionId;
+static char pipename[MAX_PIPENAME];
 
 int tfs_mount(char const *client_pipe_path, char const *server_pipe_path) {
     /* TODO: Implement this */
@@ -25,9 +31,12 @@ int tfs_mount(char const *client_pipe_path, char const *server_pipe_path) {
     
     buffer[0]='1';
     strcpy(buffer+1,client_pipe_path); 
+    strcpy(pipename,client_pipe_path);
     
     // Cliente faz pedido ao servidor e espera pela resposta
-    write(fd_server,buffer,sizeof(buffer));
+    if(write(fd_server,buffer,sizeof(buffer))<0){
+        return -1;
+    }
 
     // Abre o pipe do client
     fd_client = open(client_pipe_path,O_RDONLY);
@@ -36,7 +45,9 @@ int tfs_mount(char const *client_pipe_path, char const *server_pipe_path) {
         return -1;
 
     // Cliente le o session id caso seja possivel abrir sessao
-    read(fd_client,&sessionId,sizeof(int));
+    if(read(fd_client,&sessionId,sizeof(int))<0){
+        return -1;
+    }
 
     // Nao foi possivel abrir sessao
     if(sessionId < 0)
@@ -52,16 +63,20 @@ int tfs_unmount() {
     memcpy(buffer+1, &sessionId, sizeof(int));
 
     // Faz request de unmount
-    write(fd_server, buffer,sizeof(buffer));
+    if (write(fd_server, buffer,sizeof(buffer))<0){
+        return -1;
+    }
 
     // Recebe resposta
-    read(fd_client, &ans, sizeof(int));
+    if (read(fd_client, &ans, sizeof(int))<0){
+        return -1;
+    }
 
     return ans;
 
     close(fd_server);
     close(fd_client);
-    unlink(fd_server);
+    unlink(pipename);
 }
 
 int tfs_open(char const *name, int flags) {
@@ -75,9 +90,13 @@ int tfs_open(char const *name, int flags) {
     memcpy(buffer+1+sizeof(int),name,40);
     memcpy(buffer+1+sizeof(int)+40,&flags,sizeof(int));
 
-    write(fd_server,buffer,sizeof(buffer));
+    if (write(fd_server,buffer,sizeof(buffer))<0){
+        return -1;
+    }
 
-    read(fd_client,&returnVal,sizeof(int)); //se der read do server funciona, perguntar ao stor
+    if (read(fd_client,&returnVal,sizeof(int))<0){
+        return -1;
+    }
 
     return returnVal;
 }
@@ -91,9 +110,13 @@ int tfs_close(int fhandle) {
     memcpy(buffer+1,&sessionId, sizeof(int));
     memcpy(buffer+1+sizeof(int), &fhandle, sizeof(int));
 
-    write(fd_server,buffer, sizeof(buffer));
+    if (write(fd_server,buffer, sizeof(buffer))<0){
+        return -1;
+    }
 
-    read(fd_client, &ans, sizeof(int));
+    if (read(fd_client, &ans, sizeof(int))<0){
+        return -1;
+    }
 
     return ans;
 }
@@ -112,9 +135,13 @@ ssize_t tfs_write(int fhandle, void const *buffer, size_t len) {
     memcpy(bufferTotal + 1 + sizeof(int) + sizeof(int), &len, sizeof(size_t));
     memcpy(bufferTotal + 1 + sizeof(int) + sizeof(int) + sizeof(size_t), buffer, len);
 
-    write(fd_server,bufferTotal,sizeof(bufferTotal));
+    if (write(fd_server,bufferTotal,sizeof(bufferTotal))<0){
+        return -1;
+    }
 
-    read(fd_client,&bytesWritten,sizeof(ssize_t));
+    if (read(fd_client,&bytesWritten,sizeof(ssize_t))<0){
+        return -1;
+    }
 
     return bytesWritten;
 }
@@ -130,10 +157,16 @@ ssize_t tfs_read(int fhandle, void *buffer, size_t len) {
     memcpy(bufferTotal + 1 + sizeof(int), &fhandle, sizeof(int));
     memcpy(bufferTotal + 1 + sizeof(int) + sizeof(int), &len, sizeof(size_t));
 
-    write(fd_server,bufferTotal, sizeof(bufferTotal));
+    if (write(fd_server,bufferTotal, sizeof(bufferTotal))<0){
+        return -1;
+    }
 
-    read(fd_client, &bytesRead, sizeof(ssize_t));
-    read(fd_client, buffer, bytesRead);
+    if (read(fd_client, &bytesRead, sizeof(ssize_t))<0){
+        return -1;
+    }
+     if (read(fd_client, buffer,(size_t) bytesRead)<0){
+         return -1;
+     }
 
     return bytesRead;
 }
@@ -147,9 +180,13 @@ int tfs_shutdown_after_all_closed() {
 
     memcpy(buffer + 1, &sessionId, sizeof(int));
 
-    write(fd_server, buffer, sizeof(buffer));
+    if (write(fd_server, buffer, sizeof(buffer))<0){
+        return -1;
+    }
 
-    read(fd_server, &success, sizeof(int));
+    if (read(fd_server, &success, sizeof(int))<0){
+        return -1;
+    }
 
     return success;
 }

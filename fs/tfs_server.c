@@ -1,10 +1,18 @@
 #include "operations.h"
+#include <stdio.h>
+#include <unistd.h>
+#include <sys/types.h>
+#include <sys/stat.h>
 #include <string.h>
+#include <fcntl.h>
+
 
 /*Session table*/
 static char session_table[MAX_SESSIONS][MAX_FILE_NAME];
 
 pthread_t thread_table[MAX_SESSIONS];
+
+static char buffer_thread[MAX_SESSIONS][100];
 
 // Number of sessions running atm
 int runningSessions=0;
@@ -57,6 +65,8 @@ int tfs_mount_server(int fd_server){
     // Le pipename do client
     read_all(fd_server,buffer,MAX_PIPENAME);
     
+    memcpy(buffer_thread,buffer,sizeof(buffer));
+
     // Atualizamos tabela de sessoes iniciadas
     memcpy(session_table[sessionId],buffer,MAX_PIPENAME);
 
@@ -201,7 +211,7 @@ int tfs_shutdown_after_all_closed_server(int fd_server){
 int main(int argc, char **argv) {
     int fd;
     char OP_CODE;
-    int r;
+    size_t r;
 
     if (argc < 2) {
         printf("Please specify the pathname of the server's pipe.\n");
@@ -211,19 +221,22 @@ int main(int argc, char **argv) {
     char *pipename = argv[1];
     printf("Starting TecnicoFS server with pipe called %s\n", pipename);
     tfs_init();
+
     int destroy_pipe= unlink(pipename);
     if (destroy_pipe<0){
-        return 0;
+        return -1;
     }
     int create_pipe=mkfifo(pipename,0777);
     if (create_pipe!=0)
         return -1;
+
     fd = open(pipename,O_RDONLY);
     if (fd<0){
         return -1;
     }
+
     while(!exitFlag){
-        r=read(fd,&OP_CODE,sizeof(char));
+        r=read_all(fd,&OP_CODE,sizeof(char));
         if (r==0){
             int erro=close(fd);
             if (erro<0){
