@@ -52,7 +52,7 @@ int tfs_mount_server(int fd_server){
     int sessionId = getSessionId();
     char buffer[41];
     // Le pipename do client
-    read(fd_server,buffer,MAX_PIPENAME);
+    read_all(fd_server,buffer,MAX_PIPENAME);
     
     // Atualizamos tabela de sessoes iniciadas
     memcpy(session_table[sessionId],buffer,MAX_PIPENAME);
@@ -61,7 +61,7 @@ int tfs_mount_server(int fd_server){
     fd_client=open(session_table[sessionId],O_WRONLY);
     if (fd_client<0)
         return -1;
-    write(fd_client,&sessionId,sizeof(int));
+    write_all(fd_client,&sessionId,sizeof(int));
 
     runningSessions++;
 }
@@ -70,15 +70,15 @@ int tfs_unmount_server(int fd_server){
     int sessionId;
     int success = 0;
     // Le session id
-    read(fd_server, &sessionId, sizeof(int));
+    read_all(fd_server, &sessionId, sizeof(int));
 
     // Apagar pipe do client da tabela de sessoes
-    free(session_table[sessionId]);
+    memset(session_table[sessionId],0,MAX_PIPENAME);
 
     runningSessions--;
 
     // Avisa o cliente do sucesso da operacao
-    write(fd_client, &success, sizeof(int));
+    write_all(fd_client, &success, sizeof(int));
 }
 
 
@@ -86,11 +86,11 @@ void tfs_open_server(int fd_server){
     int returnVal;
 
     int sessionId;
-    char fileName[41];
+    char fileName[40];
     int flags;
 
     read(fd_server,&sessionId, sizeof(int));
-    read(fd_server,&fileName, sizeof(fileName));
+    read(fd_server,fileName, 40);
     read(fd_server,&flags, sizeof(int));
 
     if (!sessionIdExists(sessionId)){
@@ -107,12 +107,12 @@ void tfs_close_server(int fd_server){
     int fhandle;
     int returnVal;
 
-    read(fd_server,&sessionId, sizeof(int));
-    read(fd_server,&fhandle,sizeof(int));
+    read_all(fd_server,&sessionId, sizeof(int));
+    read_all(fd_server,&fhandle,sizeof(int));
 
     returnVal = tfs_close(fhandle);
 
-    write(fd_client,&returnVal, sizeof(int));
+    write_all(fd_client,&returnVal, sizeof(int));
 }
 
 
@@ -128,6 +128,7 @@ void tfs_write_server(int fd_server){
     read(fd_server,&len, sizeof(size_t));
 
     char buffer[len];
+    memset(buffer,0,len);
 
     read(fd_server,buffer,len);
     if (!session_table[sessionId]){
@@ -145,16 +146,16 @@ void tfs_read_server(int fd_server){
 
     ssize_t bytesRead;
 
-    read(fd_server, &sessionId, sizeof(int));
-    read(fd_server,&fhandle, sizeof(int));
-    read(fd_server,&len, sizeof(int));
+    read_all(fd_server, &sessionId, sizeof(int));
+    read_all(fd_server,&fhandle, sizeof(int));
+    read_all(fd_server,&len, sizeof(size_t));
 
     char buffer[len];
 
-    bytesRead = tfs_read(fhandle, &buffer, len);
+    bytesRead = tfs_read(fhandle, buffer, len);
 
-    write(fd_client,bytesRead, sizeof(ssize_t));
-    write(fd_client,buffer, bytesRead);
+    write_all(fd_client,&bytesRead, sizeof(ssize_t));
+    write_all(fd_client,buffer, bytesRead);
 
 }
 
@@ -163,14 +164,14 @@ void tfs_shutdown_after_all_closed_server(fd_server){
     int sessionId;
     int success;
 
-    read(fd_server, &sessionId, sizeof(int));
+    read_all(fd_server, &sessionId, sizeof(int));
 
     success = tfs_destroy_after_all_closed();
 
     if(success)
         exitFlag=1;
 
-    write(fd_client, &success, sizeof(int));
+    write_all(fd_client, &success, sizeof(int));
 }
 
 int main(int argc, char **argv) {

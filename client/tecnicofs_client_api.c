@@ -1,4 +1,5 @@
 #include "tecnicofs_client_api.h"
+#include <string.h>
 
 int fd_server;
 int fd_client;
@@ -48,7 +49,7 @@ int tfs_unmount() {
     int ans;
 
     buffer[0] = '2';
-    memcpy(buffer+1, sessionId, sizeof(int));
+    memcpy(buffer+1, &sessionId, sizeof(int));
 
     // Faz request de unmount
     write(fd_server, buffer,sizeof(buffer));
@@ -56,26 +57,23 @@ int tfs_unmount() {
     // Recebe resposta
     read(fd_client, &ans, sizeof(int));
 
-    if(ans == -1)
-        return -1;
+    return ans;
 
     close(fd_server);
     close(fd_client);
-
-    return 0;
+    unlink(fd_server);
 }
 
 int tfs_open(char const *name, int flags) {
     /* TODO: Implement this */
     char buffer[50];
-    memset(buffer,0,sizeof(buffer));
     int returnVal;
 
     buffer[0]='3';
 
-    memcpy(buffer + 1, &sessionId, sizeof(int));
-    memcpy(buffer + 1 + sizeof(int), name, 40);
-    memcpy(buffer + 1 + sizeof(int) + 40, &flags, sizeof(int));
+    memcpy(buffer+1,&sessionId,sizeof(int));
+    memcpy(buffer+1+sizeof(int),name,40);
+    memcpy(buffer+1+sizeof(int)+40,&flags,sizeof(int));
 
     write(fd_server,buffer,sizeof(buffer));
 
@@ -102,8 +100,8 @@ int tfs_close(int fhandle) {
 
 ssize_t tfs_write(int fhandle, void const *buffer, size_t len) {
     
-    char bufferTotal[4 + len + sizeof(size_t) + 1];
-    memset(bufferTotal,0,sizeof(buffer));
+    char bufferTotal[8 + len + sizeof(size_t) + 1];
+    memset(bufferTotal,0,sizeof(bufferTotal));
     
     ssize_t bytesWritten;
 
@@ -112,7 +110,7 @@ ssize_t tfs_write(int fhandle, void const *buffer, size_t len) {
     memcpy(bufferTotal + 1, &sessionId, sizeof(int));
     memcpy(bufferTotal + 1 + sizeof(int), &fhandle, sizeof(int));
     memcpy(bufferTotal + 1 + sizeof(int) + sizeof(int), &len, sizeof(size_t));
-    memcpy(bufferTotal + 1 + sizeof(int) + sizeof(int) + sizeof(size_t), buffer, sizeof(buffer));
+    memcpy(bufferTotal + 1 + sizeof(int) + sizeof(int) + sizeof(size_t), buffer, len);
 
     write(fd_server,bufferTotal,sizeof(bufferTotal));
 
@@ -122,8 +120,9 @@ ssize_t tfs_write(int fhandle, void const *buffer, size_t len) {
 }
 
 ssize_t tfs_read(int fhandle, void *buffer, size_t len) {
-    
+    ssize_t bytesRead;
     char bufferTotal[4 + len + sizeof(size_t) + 1];
+    memset(bufferTotal,0,sizeof(bufferTotal));
 
     bufferTotal[0] = '6';
 
@@ -133,7 +132,6 @@ ssize_t tfs_read(int fhandle, void *buffer, size_t len) {
 
     write(fd_server,bufferTotal, sizeof(bufferTotal));
 
-    ssize_t bytesRead;
     read(fd_client, &bytesRead, sizeof(ssize_t));
     read(fd_client, buffer, bytesRead);
 
